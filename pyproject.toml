@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jira-backlog-groomer"
-version = "0.1.0"
+version = "0.2.0"
 description = "AI-assisted, policy-gated grooming for Jira Cloud backlogs"
 readme = "README.md"
 requires-python = ">=3.11"

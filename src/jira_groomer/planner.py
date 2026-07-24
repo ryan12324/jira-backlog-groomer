@@ -231,7 +231,17 @@ def build_plan(
             archive_eligible, archive_detail = _eligible_for_archive(
                 issue, assessment, settings, now
             )
-        if assessment.recommendation == "split":
+        if issue.is_subtask:
+            warnings.append(
+                f"{issue.key}: subtask excluded from top-level ranking and retained under "
+                "its parent for human merge/rewrite review"
+            )
+            if assessment.recommendation == "split":
+                warnings.append(
+                    f"{issue.key}: split proposal ignored because top-level stories are not "
+                    "created automatically from a subtask"
+                )
+        elif assessment.recommendation == "split":
             split_refs: list[str] = []
             split_count = max(len(assessment.split_stories), 1)
             split_size = max(1, math.ceil(assessment.priority.job_size / split_count))
@@ -311,6 +321,11 @@ def build_plan(
                     score=_score(assessment, settings),
                     explanation=_rank_explanation(assessment),
                 )
+            )
+        if assessment.recommendation == "merge_candidate":
+            warnings.append(
+                f"{issue.key}: implementation fragment is a merge candidate; no automatic "
+                "merge or deletion is planned"
             )
 
         should_rewrite = (

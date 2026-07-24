@@ -32,7 +32,7 @@ class JiraClient:
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "jira-backlog-groomer/0.1",
+            "User-Agent": "jira-backlog-groomer/0.2",
         }
         auth: httpx.Auth | None = None
         if credentials.auth_mode == "basic":

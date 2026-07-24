@@ -65,15 +65,31 @@ def plan_to_markdown(plan: GroomingPlan) -> str:
                 f"- Current INVEST quality: {assessment.invest.overall_quality}/100",
                 f"- Rationale: {assessment.rationale}",
                 "",
-                (
-                    f"**User story:** As a {story.persona}, I want {story.need}, "
-                    f"so that {story.benefit}."
-                ),
-                "",
-                "**Acceptance criteria**",
-                "",
             ]
         )
+        if story.delivery_kind == "bug_fix":
+            lines.extend(
+                [
+                    (
+                        f"**Bug outcome:** For {story.persona}, resolve {story.need}, "
+                        f"so that {story.benefit}."
+                    ),
+                    f"- Observed: {story.observed_behavior or 'Unknown'}",
+                    f"- Expected: {story.expected_behavior or 'Unknown'}",
+                    "",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    (
+                        f"**User story:** As a {story.persona}, I want {story.need}, "
+                        f"so that {story.benefit}."
+                    ),
+                    "",
+                ]
+            )
+        lines.extend(["**Acceptance criteria**", ""])
         for criterion in story.acceptance_criteria:
             lines.append(
                 f"- Given {criterion.given}, when {criterion.when}, then {criterion.then}."

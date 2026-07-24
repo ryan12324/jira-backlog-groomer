@@ -23,11 +23,16 @@ class CrossFunctionalNotes(StrictModel):
 
 
 class StorySpec(StrictModel):
+    delivery_kind: Literal["user_story", "bug_fix"] = "user_story"
     title: str = Field(min_length=5, max_length=255)
     persona: str
     need: str
     benefit: str
     context: str
+    observed_behavior: str | None = None
+    expected_behavior: str | None = None
+    reproduction_steps: list[str] = Field(default_factory=list, max_length=12)
+    affected_environment: str | None = None
     acceptance_criteria: list[AcceptanceCriterion] = Field(min_length=1, max_length=12)
     non_functional_requirements: list[str] = Field(default_factory=list, max_length=12)
     dependencies: list[str] = Field(default_factory=list, max_length=12)
@@ -62,7 +67,13 @@ class LinkSuggestion(StrictModel):
 
 class IssueAssessment(StrictModel):
     source_key: str
-    recommendation: Literal["keep", "rewrite", "split", "archive_candidate"]
+    recommendation: Literal[
+        "keep",
+        "rewrite",
+        "split",
+        "merge_candidate",
+        "archive_candidate",
+    ]
     confidence: float = Field(ge=0, le=1)
     rationale: str
     quality_findings: list[str] = Field(default_factory=list, max_length=12)
@@ -202,3 +213,24 @@ class ApplyReport(StrictModel):
     dry_run: bool
     results: list[ActionResult] = Field(default_factory=list)
     observed_updated: dict[str, datetime] = Field(default_factory=dict)
+
+
+class InventoryWave(StrictModel):
+    wave_number: int
+    keys: list[str]
+    issue_type_counts: dict[str, int]
+    parent_groups: list[str]
+
+
+class BacklogInventory(StrictModel):
+    schema_version: Literal["1"] = "1"
+    created_at: datetime
+    source_jql: str
+    issue_count: int
+    issue_type_counts: dict[str, int]
+    status_counts: dict[str, int]
+    status_category_counts: dict[str, int]
+    age_bucket_counts: dict[str, int]
+    orphan_subtask_keys: list[str]
+    oversized_parent_groups: dict[str, int]
+    waves: list[InventoryWave]

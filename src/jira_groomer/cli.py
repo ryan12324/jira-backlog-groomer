@@ -3,12 +3,14 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .ai import OpenAIBacklogAnalyst
 from .apply import PlanApplier, validate_plan
 from .config import JiraCredentials, Settings, planning_config_sha256
 from .errors import GroomerError, PolicyError
+from .inventory import build_inventory, inventory_to_markdown
 from .jira import JiraClient
 from .models import GroomingPlan
 from .planner import build_candidate_map, build_plan
@@ -33,6 +35,30 @@ def _load_plan(path: str | Path) -> GroomingPlan:
         raise PolicyError(f"Cannot load plan {plan_path}: {exc}") from exc
 
 
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("value must be positive")
+    return parsed
+
+
+def _read_keys_file(path: str | Path) -> list[str]:
+    key_path = Path(path)
+    try:
+        keys = [
+            line.strip()
+            for line in key_path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+    except OSError as exc:
+        raise PolicyError(f"Cannot read key file {key_path}: {exc}") from exc
+    if not keys:
+        raise PolicyError(f"Key file {key_path} contains no issue keys")
+    if len(keys) != len(set(keys)):
+        raise PolicyError(f"Key file {key_path} contains duplicate issue keys")
+    return keys
+
+
 def _cmd_doctor(args: argparse.Namespace) -> int:
     settings = _settings(args.config)
     with _jira(settings) as jira:
@@ -52,7 +78,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_plan(args: argparse.Namespace) -> int:
+def _cmd_inventory(args: argparse.Namespace) -> int:
     settings = _settings(args.config)
     with _jira(settings) as jira:
         issues = jira.search_issues(
@@ -62,13 +88,75 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         )
     if not issues:
         raise PolicyError("The configured JQL returned no issues")
+    inventory = build_inventory(
+        issues,
+        source_jql=settings.jira.jql,
+        wave_size=args.wave_size,
+    )
+    output_dir = Path(args.output_dir).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    inventory_id = f"inventory-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
+    json_path = output_dir / f"{inventory_id}.json"
+    report_path = output_dir / f"{inventory_id}.md"
+    waves_dir = output_dir / f"{inventory_id}.waves"
+    waves_dir.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(inventory.model_dump_json(indent=2), encoding="utf-8")
+    report_path.write_text(inventory_to_markdown(inventory), encoding="utf-8")
+    for wave in inventory.waves:
+        wave_path = waves_dir / f"wave-{wave.wave_number:03d}.keys.txt"
+        wave_path.write_text("\n".join(wave.keys) + "\n", encoding="utf-8")
+    print(
+        f"Inventory created for {inventory.issue_count} issues in "
+        f"{len(inventory.waves)} review waves."
+    )
+    print(f"Inventory JSON: {json_path}")
+    print(f"Review report: {report_path}")
+    print(f"Wave key files: {waves_dir}")
+    print("No AI request was made and no Jira data was changed.")
+    return 0
+
+
+def _cmd_plan(args: argparse.Namespace) -> int:
+    settings = _settings(args.config)
+    if args.keys_file and args.max_issues:
+        raise PolicyError("--keys-file and --max-issues cannot be used together")
+    with _jira(settings) as jira:
+        fetched_issues = jira.search_issues(
+            settings.jira.jql,
+            settings.jira.fields,
+            max_issues=None if args.keys_file else args.max_issues,
+        )
+    if args.keys_file:
+        requested_keys = _read_keys_file(args.keys_file)
+        fetched_by_key = {issue.key: issue for issue in fetched_issues}
+        missing = [key for key in requested_keys if key not in fetched_by_key]
+        if missing:
+            raise PolicyError(
+                "Wave keys are not present in the current JQL result: " + ", ".join(missing[:20])
+            )
+        issues = [fetched_by_key[key] for key in requested_keys]
+    else:
+        issues = fetched_issues
+    if not issues:
+        raise PolicyError("The configured JQL returned no issues")
     candidate_map = build_candidate_map(
         issues,
         threshold=settings.quality.candidate_similarity_threshold,
         limit=settings.quality.duplicate_candidates_per_issue,
     )
     analyst = OpenAIBacklogAnalyst(settings.ai, settings.product)
-    assessments = analyst.analyze(issues, candidate_map)
+    output_dir = Path(args.output_dir).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir = None if args.no_cache else output_dir / ".ai-cache"
+    assessments = analyst.analyze(
+        issues,
+        candidate_map,
+        cache_dir=cache_dir,
+        progress=lambda completed, total: print(
+            f"AI analysis batches: {completed}/{total}",
+            flush=True,
+        ),
+    )
     plan = build_plan(
         settings,
         issues,
@@ -76,8 +164,6 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         config_sha256=planning_config_sha256(settings),
     )
 
-    output_dir = Path(args.output_dir).resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / f"{plan.run_id}.plan.json"
     report_path = output_dir / f"{plan.run_id}.report.md"
     json_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
@@ -164,10 +250,22 @@ def _parser() -> argparse.ArgumentParser:
     doctor.add_argument("--config", default="groomer.toml")
     doctor.set_defaults(handler=_cmd_doctor)
 
+    inventory = subparsers.add_parser(
+        "inventory",
+        help="Inventory the backlog and generate parent-aware review waves",
+    )
+    inventory.add_argument("--config", default="groomer.toml")
+    inventory.add_argument("--output-dir", default=".grooming")
+    inventory.add_argument("--wave-size", type=_positive_int, default=100)
+    inventory.add_argument("--max-issues", type=_positive_int)
+    inventory.set_defaults(handler=_cmd_inventory)
+
     plan = subparsers.add_parser("plan", help="Read Jira and produce a reviewable plan")
     plan.add_argument("--config", default="groomer.toml")
     plan.add_argument("--output-dir", default=".grooming")
-    plan.add_argument("--max-issues", type=int)
+    plan.add_argument("--max-issues", type=_positive_int)
+    plan.add_argument("--keys-file")
+    plan.add_argument("--no-cache", action="store_true")
     plan.set_defaults(handler=_cmd_plan)
 
     validate = subparsers.add_parser("validate", help="Validate a saved plan offline")

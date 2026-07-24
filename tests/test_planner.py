@@ -71,3 +71,19 @@ def test_recent_archive_candidate_stays_in_ranked_backlog(settings) -> None:
     )
     assert not any(isinstance(action, ArchiveIssueAction) for action in plan.actions)
     assert plan.ranked_backlog[0].key_or_ref == issue.key
+
+
+def test_subtask_merge_candidate_is_not_top_level_ranked(settings) -> None:
+    issue = make_issue("WEB-2")
+    issue.is_subtask = True
+    issue.parent_key = "WEB-1"
+    assessment = make_assessment("WEB-2", recommendation="merge_candidate", quality=20)
+    plan = build_plan(
+        settings,
+        [issue],
+        [assessment],
+        config_sha256="abc",
+        now=datetime.now(UTC),
+    )
+    assert plan.ranked_backlog == []
+    assert any("merge candidate" in warning for warning in plan.warnings)

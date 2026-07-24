@@ -1,9 +1,9 @@
 # Jira Backlog Groomer
 
 A review-first Python CLI that reads a Jira Cloud backlog, uses OpenAI to turn weak tickets
-into strong cross-functional user stories, and produces an auditable mutation plan. It can
-rewrite, split/create, link, rank, and archive issues, but it never writes to Jira while planning
-and all write classes are disabled by default.
+into well-formed Agile work items and cross-functional user stories, and produces an auditable
+mutation plan. It can rewrite, split/create, link, rank, and archive issues, but it never writes
+to Jira while planning and all write classes are disabled by default.
 
 This is deliberately not an autonomous “let the model loose on Jira” bot. The model produces
 typed recommendations. Deterministic code constrains references, age/status archive rules,
@@ -23,6 +23,9 @@ backlog:
   failure states, and rollout.
 - Unknowns are recorded as open questions instead of being invented.
 - Splits are independently valuable vertical slices.
+- Epics are treated as outcome containers and split into vertical stories rather than FE/BE work.
+- Bugs retain observed/expected behavior, reproduction evidence, impact, and regression criteria.
+- Layer-only subtasks are flagged as merge candidates instead of becoming fake user stories.
 - Priority is a transparent WSJF-style score from business value, time criticality,
   risk reduction, and size.
 
@@ -103,6 +106,33 @@ Check Jira authentication and JQL without changing data:
 ```bash
 jira-groom doctor --config groomer.toml
 ```
+
+For a large backlog, inventory it before using AI:
+
+```bash
+jira-groom inventory \
+  --config groomer.toml \
+  --output-dir .grooming \
+  --wave-size 75
+```
+
+The inventory command reads all matching work, reports type/status/age distributions, identifies
+orphaned subtasks, and creates parent-aware `wave-001.keys.txt` files. It makes no OpenAI request
+and no Jira write. Parent groups stay together unless a single group is larger than the wave.
+
+For roughly 900 mixed issues, use 50–100 items per wave and complete one or two pilot waves before
+enabling any writes. Plan a generated wave with:
+
+```bash
+jira-groom plan \
+  --config groomer.toml \
+  --output-dir .grooming \
+  --keys-file .grooming/<inventory-id>.waves/wave-001.keys.txt
+```
+
+Completed AI batches are cached under `.grooming/.ai-cache`, so a rate limit or later batch
+failure can be retried without paying for successful unchanged batches again. Pass `--no-cache`
+only when you deliberately want fresh analysis.
 
 Generate a plan:
 
@@ -206,6 +236,7 @@ pytest
 ruff check .
 ```
 
-The test suite covers ADF rendering, similarity candidates, archive gates, plan drift, write
-gates, and Jira enhanced-search pagination. Live Jira/OpenAI integration tests are intentionally
-not run without your credentials and instance.
+The test suite covers story and bug ADF rendering, parent-aware inventory waves, subtask handling,
+similarity candidates, archive gates, plan drift, write gates, and Jira enhanced-search
+pagination. Live Jira/OpenAI integration tests are intentionally not run without your credentials
+and instance.

@@ -64,14 +64,36 @@ def story_to_adf(
     preserve_original: bool = True,
 ) -> dict:
     """Render a cross-functional user story as Jira Cloud ADF."""
-    content: list[dict] = [
-        _heading("User story"),
-        _paragraph(f"As a {story.persona}, I want {story.need}, so that {story.benefit}."),
-        _heading("Context"),
-        _paragraph(story.context),
-        _heading("Acceptance criteria"),
-        _bullet_list(_acceptance_criterion(item) for item in story.acceptance_criteria),
-    ]
+    if story.delivery_kind == "bug_fix":
+        content: list[dict] = [
+            _heading("Bug outcome"),
+            _paragraph(f"For {story.persona}, resolve {story.need}, so that {story.benefit}."),
+            _heading("Impact and context"),
+            _paragraph(story.context),
+        ]
+        bug_sections: list[tuple[str, str | None]] = [
+            ("Observed behavior", story.observed_behavior),
+            ("Expected behavior", story.expected_behavior),
+            ("Affected environment", story.affected_environment),
+        ]
+        for heading, value in bug_sections:
+            if value:
+                content.extend([_heading(heading), _paragraph(value)])
+        if story.reproduction_steps:
+            content.extend([_heading("Reproduction steps"), _bullet_list(story.reproduction_steps)])
+    else:
+        content = [
+            _heading("User story"),
+            _paragraph(f"As a {story.persona}, I want {story.need}, so that {story.benefit}."),
+            _heading("Context"),
+            _paragraph(story.context),
+        ]
+    content.extend(
+        [
+            _heading("Acceptance criteria"),
+            _bullet_list(_acceptance_criterion(item) for item in story.acceptance_criteria),
+        ]
+    )
 
     sections: list[tuple[str, list[str]]] = [
         ("Non-functional requirements", story.non_functional_requirements),
