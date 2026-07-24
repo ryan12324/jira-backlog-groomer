@@ -1,0 +1,17 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+.grooming/
+.DS_Store
+
+# Local ChatGPT/Codex project metadata and synced reference material.
+AGENTS.md
+sources/
+.agents/
+.codex/

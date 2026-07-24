@@ -1,0 +1,95 @@
+[jira]
+# May also be supplied through JIRA_BASE_URL.
+base_url = "https://your-company.atlassian.net"
+auth_mode = "basic" # "basic" (email + API token) or "bearer"
+jql = "project = WEB AND statusCategory != Done ORDER BY Rank ASC"
+project_key = "WEB"
+story_issue_type = "Story"
+# Static fields required by your create screen, for example:
+# create_fields = { customfield_12345 = "Web Platform" }
+create_fields = {}
+fields = [
+  "summary",
+  "description",
+  "issuetype",
+  "status",
+  "priority",
+  "labels",
+  "components",
+  "parent",
+  "subtasks",
+  "issuelinks",
+  "created",
+  "updated",
+]
+
+[ai]
+# Frontier-quality default. Consider gpt-5.6-terra after evaluating quality/cost.
+model = "gpt-5.6-sol"
+reasoning_effort = "medium"
+batch_size = 10
+max_parallel_requests = 4
+max_description_characters = 12000
+send_original_descriptions = true
+
+[product]
+name = "Customer web platform"
+vision = "Make the core customer journey fast, accessible, trustworthy, and measurable."
+personas = ["customer", "operations colleague", "support colleague"]
+definition_of_done = [
+  "FE and BE behavior is integrated in one demonstrable vertical slice",
+  "Automated tests cover the agreed acceptance criteria",
+  "Accessibility, security, analytics, observability, and error states are addressed",
+  "The change is deployable and rollback behavior is understood",
+]
+constraints = [
+  "FE and BE engineers work from the same backlog",
+  "Do not create separate layer tickets for one user outcome",
+]
+
+[quality]
+minimum_rewrite_score = 80
+candidate_similarity_threshold = 0.08
+duplicate_similarity_threshold = 0.28
+duplicate_candidates_per_issue = 5
+preserve_original_description = true
+groomed_label = "ai-groomed"
+needs_review_label = "ai-needs-product-review"
+
+[ranking]
+enabled = true
+business_value_weight = 1.0
+time_criticality_weight = 1.0
+risk_reduction_weight = 1.0
+job_size_floor = 1
+# Set this to move the planned order immediately before a stable Jira issue.
+# rank_anchor_issue = "WEB-1"
+
+[archive]
+# Plan generation may propose archive candidates. Application remains disabled until
+# both enabled=true and allow_apply=true are deliberately set.
+enabled = true
+allow_apply = false
+stale_after_days = 365
+allowed_status_categories = ["Done"]
+allowed_status_names = ["Duplicate", "Won't Do", "Obsolete"]
+max_per_run = 20
+
+[write_policy]
+# Each mutation class is independently gated. Start with all false, inspect the plan,
+# then enable only the operations you want for the approved run.
+allow_issue_updates = false
+allow_issue_creation = false
+allow_issue_links = false
+allow_ranking = false
+allow_archiving = false
+max_updates_per_run = 100
+max_creates_per_run = 30
+max_links_per_run = 100
+require_unchanged_issues = true
+plan_max_age_hours = 72
+
+[links]
+duplicate_link_type = "Duplicate"
+dependency_link_type = "Blocks"
+related_link_type = "Relates"
