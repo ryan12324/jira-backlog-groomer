@@ -1,4 +1,5 @@
 .env
+groomer.toml
 .venv/
 __pycache__/
 .pytest_cache/

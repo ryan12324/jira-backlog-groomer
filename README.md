@@ -10,6 +10,9 @@ typed recommendations. Deterministic code constrains references, age/status arch
 action counts, optimistic concurrency, and idempotency. A human reviews the resulting Markdown
 and JSON before a separately confirmed apply.
 
+For product direction, architecture decisions, the 900-item rollout, roadmap, and cross-PC
+resumption instructions, see [PRODUCT_PLAN.md](PRODUCT_PLAN.md).
+
 ## What “good” means here
 
 The grooming prompt and output schema are designed for a frontend/backend team sharing one
